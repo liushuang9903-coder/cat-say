@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <title>猫咪占卜机 · Cat Oracle</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Tailwind 自定义主题（柔和配色）
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: [
+                "system-ui",
+                "-apple-system",
+                "BlinkMacSystemFont",
+                "Segoe UI",
+                "sans-serif",
+              ],
+            },
+            colors: {
+              catbg: "#f8fafc",
+              catCard: "#ffffff",
+              catAccent: "#fbbf24",
+              catAccentSoft: "#fde68a",
+              catTextSoft: "#64748b",
+            },
+            boxShadow: {
+              cat: "0 18px 45px rgba(15,23,42,0.15)",
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      /* 猫咪轻微呼吸动画 */
+      @keyframes cat-breathe {
+        0% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-4px) scale(1.03);
+        }
+        100% {
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      /* 轻微抖动，用于后续交互（先预留） */
+      @keyframes cat-shake-soft {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        25% {
+          transform: translateX(-3px);
+        }
+        50% {
+          transform: translateX(3px);
+        }
+        75% {
+          transform: translateX(-2px);
+        }
+      }
+
+      .cat-breathe {
+        animation: cat-breathe 3s ease-in-out infinite;
+        transform-origin: center bottom;
+      }
+
+      /* 轻微抖动：短促的呼噜反馈 */
+      .cat-shake {
+        animation: cat-shake-soft 260ms ease-in-out;
+      }
+
+      /* 结果白光遮罩 */
+      @keyframes cat-flash {
+        0% {
+          opacity: 0;
+        }
+        45% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      .flash-active {
+        animation: cat-flash 650ms ease-out;
+      }
+
+      /* 答案卡片掉落 + 弹跳 */
+      @keyframes card-drop-bounce {
+        0% {
+          transform: translate3d(0, -40vh, 0) scale(0.9) rotate(-3deg);
+          opacity: 0;
+        }
+        40% {
+          transform: translate3d(0, 6%, 0) scale(1) rotate(1deg);
+          opacity: 1;
+        }
+        62% {
+          transform: translate3d(0, -4%, 0) scale(1.01) rotate(-1deg);
+        }
+        78% {
+          transform: translate3d(0, 0%, 0) scale(1) rotate(0deg);
+        }
+        100% {
+          transform: translate3d(0, 0%, 0) scale(1) rotate(0deg);
+          opacity: 1;
+        }
+      }
+
+      .card-enter {
+        animation: card-drop-bounce 700ms cubic-bezier(0.22, 0.68, 0, 1.02)
+          forwards;
+      }
+
+      /* 粒子：飘起的小星星 / 肉垫 */
+      @keyframes particle-pop {
+        0% {
+          transform: translate3d(0, 0, 0) scale(0.6);
+          opacity: 0;
+        }
+        15% {
+          opacity: 1;
+        }
+        100% {
+          transform: translate3d(var(--dx, 0px), var(--dy, -36px), 0)
+            scale(1.1);
+          opacity: 0;
+        }
+      }
+
+      .particle {
+        position: absolute;
+        font-size: 14px;
+        pointer-events: none;
+        animation: particle-pop 600ms ease-out forwards;
+        will-change: transform, opacity;
+      }
+
+      /* 橘猫造型 */
+      .cat-figure {
+        position: relative;
+        width: 70%;
+        max-width: 230px;
+        aspect-ratio: 1 / 1;
+        margin: 0 auto;
+        background-image: url("cats.png");
+        background-size: 200% 200%;
+        background-repeat: no-repeat;
+        background-position: 0% 0%;
+        border-radius: 26%;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14);
+      }
+    </style>
+  </head>
+
+  <body
+    class="min-h-screen flex flex-col bg-gradient-to-b from-[#fff7ed] via-[#fff1f2] to-[#fef3c7]"
+  >
+    <!-- 整体容器：垂直居中 -->
+    <main
+      class="flex-1 flex flex-col items-center justify-center px-6 pb-28 pt-10"
+    >
+      <!-- 标题与说明 -->
+      <section class="text-center mb-8">
+        <h1 class="text-2xl font-semibold text-slate-800 mb-2">
+          猫咪占卜机
+        </h1>
+        <p class="text-sm text-catTextSoft">
+          用手轻轻地、耐心地摸猫，等猫咪攒够了能量，就会给你一条带猫味的答案。
+        </p>
+      </section>
+
+      <!-- 猫咪互动区域 -->
+      <section
+        id="cat-area"
+        class="relative w-full max-w-xs sm:max-w-sm aspect-square mx-auto select-none"
+      >
+        <div
+          id="cat-hit-area"
+          class="w-full h-full rounded-3xl bg-gradient-to-b from-[#fff7ed] to-[#fed7aa] shadow-cat flex items-center justify-center overflow-hidden cursor-pointer"
+        >
+          <!-- 精灵图橘猫 -->
+          <div
+            id="cat-figure"
+            class="cat-figure cat-breathe"
+            aria-label="一只正在打盹的橘猫"
+          ></div>
+        </div>
+
+        <!-- 结果白光遮罩 -->
+        <div
+          id="result-flash"
+          class="pointer-events-none absolute inset-0 rounded-3xl bg-white"
+          style="opacity: 0"
+        ></div>
+
+        <!-- 答案卡片 -->
+        <div
+          id="answer-card"
+          class="invisible opacity-0 fixed inset-0 z-30 flex items-center justify-center transition-opacity duration-300"
+        >
+          <div
+            id="answer-card-inner"
+            class="w-[88vw] max-w-sm bg-white/70 backdrop-blur-[10px] rounded-[26px] border border-white/60 shadow-[0_24px_60px_rgba(15,23,42,0.35)] px-6 py-5 sm:px-7 sm:py-6"
+          >
+            <div
+              id="answer-type-pill"
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mb-1.5 bg-amber-50 text-amber-700"
+            >
+              猫咪正在思考…
+            </div>
+            <p
+              id="answer-main"
+              class="text-lg sm:text-2xl font-semibold text-slate-800 mb-3 leading-snug"
+            >
+              …
+            </p>
+            <p
+              id="answer-detail"
+              class="text-sm sm:text-base text-slate-700/80 leading-relaxed"
+            >
+              等猫咪给你一个正式的答案。
+            </p>
+            <button
+              id="answer-dismiss"
+              type="button"
+              class="mt-3 inline-flex items-center text-[11px] sm:text-xs text-catTextSoft hover:text-slate-800 transition-colors"
+            >
+              收好这条猫式建议
+            </button>
+          </div>
+        </div>
+
+        <!-- 轻微的提示文字 -->
+        <p
+          class="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs text-catTextSoft"
+        >
+          在猫身上来回滑动 / 轻抚
+        </p>
+      </section>
+    </main>
+
+    <!-- 底部隐藏肉垫进度条 -->
+    <footer
+      class="fixed inset-x-0 bottom-0 px-5 pb-6 pt-3 bg-gradient-to-t from-white/90 via-white/80 to-transparent backdrop-blur-sm"
+    >
+      <div
+        id="progress-wrapper"
+        class="max-w-md mx-auto opacity-0 translate-y-3 transition-all duration-500"
+      >
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-medium text-slate-700">猫咪能量</span>
+          <span
+            id="progress-label"
+            class="text-[11px] text-catTextSoft tracking-wide"
+            >摸一摸试试看</span
+          >
+        </div>
+
+        <!-- 肉垫槽 -->
+        <div
+          class="relative h-4 rounded-full bg-slate-200/80 overflow-hidden shadow-inner"
+        >
+          <!-- 背景肉垫纹理（简单版：渐变） -->
+          <div
+            class="absolute inset-0 bg-[radial-gradient(circle_at_10%_50%,#fecaca_0,#fecaca_28%,transparent_30%),radial-gradient(circle_at_35%_50%,#fed7aa_0,#fed7aa_26%,transparent_30%),radial-gradient(circle_at_60%_50%,#fed7aa_0,#fed7aa_26%,transparent_30%),radial-gradient(circle_at_85%_50%,#fecaca_0,#fecaca_28%,transparent_30%)] opacity-60 pointer-events-none"
+          ></div>
+
+          <!-- 进度条主体 -->
+          <div
+            id="progress-bar"
+            class="absolute inset-y-0 left-0 w-0 bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 rounded-full transition-[width] duration-300 ease-out"
+          ></div>
+        </div>
+
+        <!-- 小提示 paw -->
+        <div class="mt-1.5 flex items-center justify-end gap-1">
+          <span class="text-[10px] text-catTextSoft">肉垫充能中</span>
+          <span class="text-xs">🐾</span>
+        </div>
+      </div>
+    </footer>
+
+    <!-- 预留音频接口 -->
+    <audio id="audio-purr" src="purr.mp3" preload="auto"></audio>
+    <audio id="audio-meow" src="meow.mp3" preload="auto"></audio>
+    <audio id="audio-paper" src="paper.mp3" preload="auto"></audio>
+
+    <!-- 核心脚本：能量进度逻辑 & 答案库 -->
+    <script>
+      // 猫式哲学答案库（按猫咪颜色/性格分类）
+      const catAnswers = [
+        // 白猫 - 温柔类
+        {
+          cat: "white",
+          text: "蹭蹭你，一切都会好起来的。",
+          detail: "有时候停下来闭上眼，就能感受到阳光的温度。",
+        },
+        {
+          cat: "white",
+          text: "你在发光，只是你自己没察觉。",
+          detail: "就像白色的毛发在月光下一样，你也很耀眼。",
+        },
+
+        // 灰猫 - 理性类
+        {
+          cat: "gray",
+          text: "观察，然后等待时机。",
+          detail: "在跳跃之前，猫总是会先晃动屁股瞄准很久。",
+        },
+        {
+          cat: "gray",
+          text: "这不值得你浪费一次午睡。",
+          detail: "有些干扰只是窗外的麻雀，看一眼就够了。",
+        },
+
+        // 橘猫 - 乐观类
+        {
+          cat: "orange",
+          text: "大橘为重，先吃饱再说！",
+          detail: "肚子填满了，心里的烦恼就挤不出位置了。",
+        },
+        {
+          cat: "orange",
+          text: "生活就像罐头，总有打开的办法。",
+          detail: "只要你够努力（或者叫得够大声），总会有收获。",
+        },
+
+        // 黑猫 - 酷酷类
+        {
+          cat: "black",
+          text: "我就在黑暗里看着你折腾。",
+          detail: "别装了，其实你心里早就有答案了，对吧？",
+        },
+        {
+          cat: "black",
+          text: "哈气！离那个烂人远点。",
+          detail: "我的直觉从没错过，你的也一样。",
+        },
+      ];
+
+      // 简单状态管理
+      const catArea = document.getElementById("cat-area");
+      const catHitArea = document.getElementById("cat-hit-area");
+      const catFigure = document.getElementById("cat-figure");
+      const progressWrapper = document.getElementById("progress-wrapper");
+      const progressBar = document.getElementById("progress-bar");
+      const progressLabel = document.getElementById("progress-label");
+      const resultFlash = document.getElementById("result-flash");
+      const answerCard = document.getElementById("answer-card");
+      const answerCardInner = document.getElementById("answer-card-inner");
+      const answerTypePill = document.getElementById("answer-type-pill");
+      const answerMain = document.getElementById("answer-main");
+      const answerDetail = document.getElementById("answer-detail");
+      const answerDismiss = document.getElementById("answer-dismiss");
+
+      const audioPurr = document.getElementById("audio-purr");
+      const audioMeow = document.getElementById("audio-meow");
+      const audioPaper = document.getElementById("audio-paper");
+
+      let energy = 0; // 0 - 100
+      let hasStarted = false;
+      let lastPointerPos = null;
+      let resultShown = false;
+      let particleId = 0;
+      let currentCatColor = null;
+
+      const MAX_ENERGY = 100;
+      const ENERGY_PER_STROKE_UNIT = 0.08; // 手指/鼠标移动距离对能量的影响
+
+      function revealProgressBar() {
+        if (!hasStarted) {
+          hasStarted = true;
+          progressWrapper.classList.remove("opacity-0", "translate-y-3");
+          progressWrapper.classList.add("opacity-100", "translate-y-0");
+        }
+      }
+
+      function setEnergy(value) {
+        const clamped = Math.max(0, Math.min(MAX_ENERGY, value));
+        energy = clamped;
+
+        const percentage = (clamped / MAX_ENERGY) * 100;
+        progressBar.style.width = percentage + "%";
+
+        if (clamped === 0) {
+          progressLabel.textContent = "摸一摸试试看";
+        } else if (clamped < 30) {
+          progressLabel.textContent = "猫咪刚刚醒，还在打哈欠…";
+        } else if (clamped < 70) {
+          progressLabel.textContent = "呼噜声渐渐变大了…";
+        } else if (clamped < MAX_ENERGY) {
+          progressLabel.textContent = "再多摸一会儿，马上就要回答你了！";
+        } else {
+          progressLabel.textContent = "猫咪能量已满！";
+          if (!resultShown) {
+            triggerResultSequence();
+          }
+        }
+      }
+
+      // 粒子特效：在猫咪区域生成一小撮星星 / 肉垫
+      function spawnParticle(clientX, clientY) {
+        const rect = catHitArea.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        const particle = document.createElement("span");
+        particle.className = "particle";
+        particle.style.left = x + "px";
+        particle.style.top = y + "px";
+
+        const dx = (Math.random() - 0.5) * 26;
+        const dy = -20 - Math.random() * 20;
+        particle.style.setProperty("--dx", dx + "px");
+        particle.style.setProperty("--dy", dy + "px");
+
+        const variants = ["🐾", "🐾", "🐾"];
+        particle.textContent =
+          variants[(particleId++ + variants.length) % variants.length];
+
+        catHitArea.appendChild(particle);
+
+        setTimeout(() => {
+          particle.remove();
+        }, 700);
+      }
+
+      function softShakeCat() {
+        if (!catFigure) return;
+        catFigure.classList.add("cat-shake");
+        setTimeout(() => {
+          catFigure.classList.remove("cat-shake");
+        }, 260);
+      }
+
+      // 2x2 精灵图：随机选择其中一只猫
+      function setRandomCatSprite() {
+        if (!catFigure) return;
+        const total = 4;
+        const cols = 2;
+        const index = Math.floor(Math.random() * total);
+        const col = index % cols;
+        const row = Math.floor(index / cols);
+        const x = col * 100;
+        const y = row * 100;
+        catFigure.style.backgroundPosition = x + "% " + y + "%";
+
+        // 根据索引映射当前猫咪性格/颜色
+        const colorMap = ["white", "gray", "orange", "black"];
+        currentCatColor = colorMap[index] || null;
+      }
+
+      function playSafe(audioEl) {
+        if (!audioEl) return;
+        const playPromise = audioEl.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {});
+        }
+      }
+
+      // 随机挑选一条猫式答案（优先使用当前猫咪对应的性格池）
+      function pickRandomAnswer(catColor) {
+        if (!catAnswers || catAnswers.length === 0) return null;
+
+        let pool = catAnswers;
+        if (catColor) {
+          const filtered = catAnswers.filter((a) => a.cat === catColor);
+          if (filtered.length > 0) {
+            pool = filtered;
+          }
+        }
+
+        const idx = Math.floor(Math.random() * pool.length);
+        return pool[idx];
+      }
+
+      function getTypeLabelAndColor(catColor) {
+        switch (catColor) {
+          case "white":
+            return {
+              label: "白猫 · 温柔治愈",
+              bg: "bg-sky-50",
+              text: "text-sky-700",
+            };
+          case "gray":
+            return {
+              label: "灰猫 · 冷静理性",
+              bg: "bg-slate-100",
+              text: "text-slate-700",
+            };
+          case "orange":
+            return {
+              label: "橘猫 · 乐观吃货",
+              bg: "bg-amber-50",
+              text: "text-amber-700",
+            };
+          case "black":
+            return {
+              label: "黑猫 · 神秘毒舌",
+              bg: "bg-purple-50",
+              text: "text-purple-700",
+            };
+          default:
+            return {
+              label: "猫式哲学",
+              bg: "bg-amber-50",
+              text: "text-amber-700",
+            };
+        }
+      }
+
+      function showAnswerCard(answer) {
+        if (!answer) return;
+        resultShown = true;
+
+        const typeInfo = getTypeLabelAndColor(answer.cat);
+
+        answerTypePill.textContent = typeInfo.label;
+        answerTypePill.className =
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mb-1.5 " +
+          typeInfo.bg +
+          " " +
+          typeInfo.text;
+
+        answerMain.textContent = answer.text;
+        answerDetail.textContent = answer.detail;
+
+        // 显示整体遮罩
+        answerCard.classList.remove("invisible");
+        answerCard.classList.remove("opacity-0");
+
+        // 触发卡片掉落动画
+        if (!answerCardInner) return;
+        answerCardInner.classList.remove("card-enter");
+        void answerCardInner.offsetWidth; // 强制 reflow
+        answerCardInner.classList.add("card-enter");
+
+        playSafe(audioMeow);
+        setTimeout(() => {
+          playSafe(audioPaper);
+        }, 120);
+      }
+
+      function hideAnswerCard() {
+        answerCard.classList.add("opacity-0");
+        setTimeout(() => {
+          answerCard.classList.add("invisible");
+        }, 220);
+        resultShown = false;
+        // 重置进度条，准备下一次占卜
+        setEnergy(0);
+        // 换一只猫，开始下一轮占卜
+        setRandomCatSprite();
+      }
+
+      function triggerResultSequence() {
+        // 白光闪一下
+        resultFlash.classList.remove("flash-active");
+        void resultFlash.offsetWidth;
+        resultFlash.classList.add("flash-active");
+
+        // 呼噜震动
+        softShakeCat();
+        playSafe(audioPurr);
+
+        const answer = pickRandomAnswer(currentCatColor);
+
+        // 稍微等一下白光峰值，再掉卡片
+        setTimeout(() => {
+          showAnswerCard(answer);
+        }, 260);
+      }
+
+      function handlePointerMove(clientX, clientY) {
+        revealProgressBar();
+
+        const rect = catHitArea.getBoundingClientRect();
+        // 只在命中区域内才算“摸猫”
+        if (
+          clientX < rect.left ||
+          clientX > rect.right ||
+          clientY < rect.top ||
+          clientY > rect.bottom
+        ) {
+          lastPointerPos = null;
+          return;
+        }
+
+        const current = { x: clientX, y: clientY };
+
+        if (lastPointerPos) {
+          const dx = current.x - lastPointerPos.x;
+          const dy = current.y - lastPointerPos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance > 0) {
+            const gain = distance * ENERGY_PER_STROKE_UNIT;
+            setEnergy(energy + gain);
+          }
+        }
+
+        lastPointerPos = current;
+
+        // 每次有效抚摸时偶尔生成一个小粒子
+        if (Math.random() < 0.35) {
+          spawnParticle(clientX, clientY);
+        }
+      }
+
+      // 鼠标事件
+      let isMouseDown = false;
+
+      catHitArea.addEventListener("mousedown", (e) => {
+        isMouseDown = true;
+        lastPointerPos = { x: e.clientX, y: e.clientY };
+        revealProgressBar();
+        softShakeCat();
+        playSafe(audioPurr);
+      });
+
+      window.addEventListener("mouseup", () => {
+        isMouseDown = false;
+        lastPointerPos = null;
+      });
+
+      catHitArea.addEventListener("mousemove", (e) => {
+        if (!isMouseDown) return;
+        handlePointerMove(e.clientX, e.clientY);
+      });
+
+      // 触摸事件（移动端）
+      catHitArea.addEventListener(
+        "touchstart",
+        (e) => {
+          if (e.touches.length > 0) {
+            const t = e.touches[0];
+            lastPointerPos = { x: t.clientX, y: t.clientY };
+            revealProgressBar();
+            softShakeCat();
+            playSafe(audioPurr);
+          }
+        },
+        { passive: true }
+      );
+
+      catHitArea.addEventListener(
+        "touchmove",
+        (e) => {
+          if (e.touches.length > 0) {
+            const t = e.touches[0];
+            handlePointerMove(t.clientX, t.clientY);
+          }
+        },
+        { passive: true }
+      );
+
+      catHitArea.addEventListener(
+        "touchend",
+        () => {
+          lastPointerPos = null;
+        },
+        { passive: true }
+      );
+
+      // 关闭答案卡片（点击按钮或任意遮罩区域）
+      answerDismiss.addEventListener("click", hideAnswerCard);
+      answerCard.addEventListener("click", hideAnswerCard);
+
+      // 初始状态
+      setRandomCatSprite();
+      setEnergy(0);
+    </script>
+  </body>
+</html>
+
