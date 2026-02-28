@@ -148,6 +148,25 @@
         will-change: transform, opacity;
       }
 
+      /* 详情行展开 / 收起过渡 */
+      .answer-detail-transition {
+        transition: opacity 260ms ease-out, max-height 260ms ease-out,
+          margin-top 260ms ease-out;
+        overflow: hidden;
+      }
+
+      .answer-detail-collapsed {
+        opacity: 0;
+        max-height: 0;
+        margin-top: 0;
+      }
+
+      .answer-detail-expanded {
+        opacity: 1;
+        max-height: 200px;
+        margin-top: 0.25rem; /* 与 Tailwind 的 mt-1 接近 */
+      }
+
       /* 猫图容器：单张图片，自适应移动端 */
       .cat-figure {
         position: relative;
@@ -216,7 +235,7 @@
           >
             <div
               id="answer-type-pill"
-              class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mb-1.5 bg-amber-50 text-amber-700"
+              class="inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-medium mb-2 mx-auto bg-white/60 text-slate-800"
             >
               猫咪正在思考…
             </div>
@@ -228,14 +247,14 @@
             </p>
             <p
               id="answer-detail"
-              class="text-sm sm:text-base text-slate-700/80 leading-relaxed"
+              class="answer-detail-transition answer-detail-collapsed text-sm sm:text-base text-slate-700/80 leading-relaxed"
             >
               等猫咪给你一个正式的答案。
             </p>
             <button
               id="answer-dismiss"
               type="button"
-              class="mt-3 inline-flex items-center text-[11px] sm:text-xs text-catTextSoft hover:text-slate-800 transition-colors"
+              class="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-full text-xs sm:text-sm font-medium bg-amber-300/90 text-slate-800 hover:bg-amber-400 active:scale-95 transition transform duration-150 shadow-sm"
             >
               收好这条猫式建议
             </button>
@@ -512,6 +531,7 @@
       let resultShown = false;
       let particleId = 0;
       let currentScene = null;
+      let isDetailRevealed = false;
 
       const MAX_ENERGY = 100;
       const ENERGY_PER_STROKE_UNIT = 0.08; // 手指/鼠标移动距离对能量的影响
@@ -612,17 +632,25 @@
       function showAnswerCard(scene, option) {
         if (!scene || !option) return;
         resultShown = true;
+        isDetailRevealed = false;
 
-        // 顶部小标签：展示当前场景行为语
-        answerTypePill.textContent =
-          "猫咪正在：" + (scene.action || "忙碌中...");
+        // 顶部状态标签：直接使用场景行为语，居中胶囊显示
+        answerTypePill.textContent = scene.action || "忙碌中...";
         answerTypePill.className =
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mb-1.5 bg-amber-50 text-amber-700";
+          "inline-flex items-center justify-center rounded-full px-3 py-1 text-[11px] font-medium mb-2 mx-auto bg-white/60 text-slate-800";
 
-        // 主文案 + 详细解释
+        // 主文案：加粗大标题
         answerMain.textContent = option.text || "猫咪还在考虑中...";
+
+        // 详情文案：先写入文本，但保持折叠状态，等待第二步点击展开
         answerDetail.textContent =
           option.detail || "再多摸一会儿，说不定就有答案。";
+        answerDetail.classList.remove("answer-detail-expanded");
+        answerDetail.classList.add("answer-detail-transition");
+        answerDetail.classList.add("answer-detail-collapsed");
+
+        // 第一步按钮可见
+        answerDismiss.classList.remove("hidden");
 
         // 显示整体遮罩
         answerCard.classList.remove("invisible");
@@ -646,6 +674,7 @@
           answerCard.classList.add("invisible");
         }, 220);
         resultShown = false;
+        isDetailRevealed = false;
         // 重置进度条，准备下一次占卜
         setEnergy(0);
         // 换一只猫，开始下一轮占卜
@@ -668,6 +697,15 @@
         setTimeout(() => {
           showAnswerCard(currentScene, option);
         }, 260);
+      }
+
+      function revealDetail() {
+        if (isDetailRevealed) return;
+        isDetailRevealed = true;
+        answerDetail.classList.remove("answer-detail-collapsed");
+        answerDetail.classList.add("answer-detail-expanded");
+        // 第二步展开后，按钮淡出隐藏，由用户点击卡片外部来结束本轮占卜
+        answerDismiss.classList.add("hidden");
       }
 
       function handlePointerMove(clientX, clientY) {
@@ -762,8 +800,11 @@
       );
 
       // 关闭答案卡片（点击按钮或任意遮罩区域）
-      answerDismiss.addEventListener("click", hideAnswerCard);
+      answerDismiss.addEventListener("click", revealDetail);
       answerCard.addEventListener("click", hideAnswerCard);
+      if (answerCardInner) {
+        answerCardInner.addEventListener("click", (e) => e.stopPropagation());
+      }
 
       // 初始状态
       setRandomCatScene();
