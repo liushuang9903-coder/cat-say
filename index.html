@@ -148,17 +148,16 @@
         will-change: transform, opacity;
       }
 
-      /* 橘猫造型 */
+      /* 猫图容器：单张图片，自适应移动端 */
       .cat-figure {
         position: relative;
-        width: 70%;
-        max-width: 230px;
+        width: 72vw;
+        max-width: 260px;
         aspect-ratio: 1 / 1;
         margin: 0 auto;
-        background-image: url("cats.png");
-        background-size: 200% 200%;
+        background-size: contain;
         background-repeat: no-repeat;
-        background-position: 0% 0%;
+        background-position: center;
         border-radius: 26%;
         box-shadow: 0 18px 45px rgba(15, 23, 42, 0.14);
       }
@@ -300,7 +299,144 @@
 
     <!-- 核心脚本：能量进度逻辑 & 答案库 -->
     <script>
-      // 猫式哲学答案库（按猫咪颜色/性格分类）
+      // 场景化猫咪答案库：先随机场景，再从该场景内抽文案
+      const catScenes = [
+        {
+          id: 1,
+          img: "cat1.png",
+          action: "大口干饭中...",
+          options: [
+            {
+              text: "先犒劳下自己！",
+              detail: "没什么事是一个罐头解决不了的。",
+            },
+            {
+              text: "胃比心更需要填满。",
+              detail: "吃饱了才有力气去应付麻烦的人类。",
+            },
+            {
+              text: "好运正在派送",
+              detail: "猫粮总是准时掉落。",
+            },
+          ],
+        },
+        {
+          id: 2,
+          img: "cat2.png",
+          action: "优雅拉伸中...",
+          options: [
+            {
+              text: "舒展一下",
+              detail: "别把自己崩得太紧，伸个长长的懒腰吧。",
+            },
+            {
+              text: "换个姿势看世界。",
+              detail: "站得高、伸得长，烦恼通通变小。",
+            },
+            {
+              text: "下一步就是飞扑！",
+              detail: "放松是为了更好的出击",
+            },
+          ],
+        },
+        {
+          id: 3,
+          img: "cat3.png",
+          action: "空中飞猫！",
+          options: [
+            {
+              text: "发现目标！",
+              detail: "别犹豫！踩红点！",
+            },
+            {
+              text: "按照直觉狂奔。",
+              detail: "身体会大脑先到达目的地。",
+            },
+            {
+              text: "哪怕扑空了，姿势也要帅。",
+              detail: "勇敢跳跃，自带闪光灯。",
+            },
+          ],
+        },
+        {
+          id: 4,
+          img: "cat4.png",
+          action: "死死抱住小鱼干",
+          options: [
+            {
+              text: "这事稳得像怀里的鱼。",
+              detail: "谁也别想抢走你的机会。",
+            },
+            {
+              text: "不需要感到抱歉。",
+              detail: "心安理得地享受战利品。",
+            },
+            {
+              text: "你已经拥有最好的了。",
+              detail: "抱在怀里，吃定怀里。",
+            },
+          ],
+        },
+        {
+          id: 5,
+          img: "cat5.png",
+          action: "盯着电脑思考（或发呆）",
+          options: [
+            {
+              text: "答案就在你心里。",
+              detail: "搜索框搜不到你想要的决心。",
+            },
+            {
+              text: "这不值得你浪费一次午睡。",
+              detail: "有些干扰只是屏幕上的小虫子",
+            },
+            {
+              text: "请按兵不动。",
+              detail: "最高端的猎手往往以猎物的形式出现",
+            },
+          ],
+        },
+        {
+          id: 6,
+          img: "cat6.png",
+          action: "一脸严肃地用力中...",
+          options: [
+            {
+              text: "有些不愉快的就把它埋了吧。",
+              detail: "掩埋过去是为了清新的明天。",
+            },
+            {
+              text: "努力后会有前所未有的轻松。",
+              detail: "把压力排泄掉，生活都轻了。",
+            },
+            {
+              text: "放下包袱，优雅前行。",
+              detail: "腾出空间才能装下更多猫罐头。",
+            },
+          ],
+        },
+        {
+          id: 7,
+          img: "cat7.png",
+          action: "好奇地钻进包包/准备出发",
+          options: [
+            {
+              text: "钻进安全区。",
+              detail: "暂时躲避一下并不可耻。",
+            },
+            {
+              text: "未知的冒险即将开始。",
+              detail: "外面的空气很新鲜。",
+            },
+            {
+              text: "换个环境，好运就会发生。",
+              detail: "到处都是猫薄荷。",
+            },
+          ],
+        },
+      ];
+
+      // 旧结构保留但不再使用，后续逻辑全部切到 catScenes
       const catAnswers = [
         // 白猫 - 温柔类
         {
@@ -375,7 +511,7 @@
       let lastPointerPos = null;
       let resultShown = false;
       let particleId = 0;
-      let currentCatColor = null;
+      let currentScene = null;
 
       const MAX_ENERGY = 100;
       const ENERGY_PER_STROKE_UNIT = 0.08; // 手指/鼠标移动距离对能量的影响
@@ -446,21 +582,16 @@
         }, 260);
       }
 
-      // 2x2 精灵图：随机选择其中一只猫
-      function setRandomCatSprite() {
+      // 随机选择一个场景，并展示对应的猫图
+      function setRandomCatScene() {
         if (!catFigure) return;
-        const total = 4;
-        const cols = 2;
-        const index = Math.floor(Math.random() * total);
-        const col = index % cols;
-        const row = Math.floor(index / cols);
-        const x = col * 100;
-        const y = row * 100;
-        catFigure.style.backgroundPosition = x + "% " + y + "%";
-
-        // 根据索引映射当前猫咪性格/颜色
-        const colorMap = ["white", "gray", "orange", "black"];
-        currentCatColor = colorMap[index] || null;
+        if (!catScenes || catScenes.length === 0) return;
+        const index = Math.floor(Math.random() * catScenes.length);
+        currentScene = catScenes[index];
+        catFigure.style.backgroundImage = "url('" + currentScene.img + "')";
+        catFigure.style.backgroundSize = "contain";
+        catFigure.style.backgroundPosition = "center";
+        catFigure.style.backgroundRepeat = "no-repeat";
       }
 
       function playSafe(audioEl) {
@@ -471,72 +602,27 @@
         }
       }
 
-      // 随机挑选一条猫式答案（优先使用当前猫咪对应的性格池）
-      function pickRandomAnswer(catColor) {
-        if (!catAnswers || catAnswers.length === 0) return null;
-
-        let pool = catAnswers;
-        if (catColor) {
-          const filtered = catAnswers.filter((a) => a.cat === catColor);
-          if (filtered.length > 0) {
-            pool = filtered;
-          }
-        }
-
-        const idx = Math.floor(Math.random() * pool.length);
-        return pool[idx];
+      // 从指定场景中随机选择一条文案
+      function pickRandomOption(scene) {
+        if (!scene || !scene.options || scene.options.length === 0) return null;
+        const idx = Math.floor(Math.random() * scene.options.length);
+        return scene.options[idx];
       }
 
-      function getTypeLabelAndColor(catColor) {
-        switch (catColor) {
-          case "white":
-            return {
-              label: "白猫 · 温柔治愈",
-              bg: "bg-sky-50",
-              text: "text-sky-700",
-            };
-          case "gray":
-            return {
-              label: "灰猫 · 冷静理性",
-              bg: "bg-slate-100",
-              text: "text-slate-700",
-            };
-          case "orange":
-            return {
-              label: "橘猫 · 乐观吃货",
-              bg: "bg-amber-50",
-              text: "text-amber-700",
-            };
-          case "black":
-            return {
-              label: "黑猫 · 神秘毒舌",
-              bg: "bg-purple-50",
-              text: "text-purple-700",
-            };
-          default:
-            return {
-              label: "猫式哲学",
-              bg: "bg-amber-50",
-              text: "text-amber-700",
-            };
-        }
-      }
-
-      function showAnswerCard(answer) {
-        if (!answer) return;
+      function showAnswerCard(scene, option) {
+        if (!scene || !option) return;
         resultShown = true;
 
-        const typeInfo = getTypeLabelAndColor(answer.cat);
-
-        answerTypePill.textContent = typeInfo.label;
+        // 顶部小标签：展示当前场景行为语
+        answerTypePill.textContent =
+          "猫咪正在：" + (scene.action || "忙碌中...");
         answerTypePill.className =
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mb-1.5 " +
-          typeInfo.bg +
-          " " +
-          typeInfo.text;
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium mb-1.5 bg-amber-50 text-amber-700";
 
-        answerMain.textContent = answer.text;
-        answerDetail.textContent = answer.detail;
+        // 主文案 + 详细解释
+        answerMain.textContent = option.text || "猫咪还在考虑中...";
+        answerDetail.textContent =
+          option.detail || "再多摸一会儿，说不定就有答案。";
 
         // 显示整体遮罩
         answerCard.classList.remove("invisible");
@@ -563,7 +649,7 @@
         // 重置进度条，准备下一次占卜
         setEnergy(0);
         // 换一只猫，开始下一轮占卜
-        setRandomCatSprite();
+        setRandomCatScene();
       }
 
       function triggerResultSequence() {
@@ -576,11 +662,11 @@
         softShakeCat();
         playSafe(audioPurr);
 
-        const answer = pickRandomAnswer(currentCatColor);
+        const option = pickRandomOption(currentScene);
 
         // 稍微等一下白光峰值，再掉卡片
         setTimeout(() => {
-          showAnswerCard(answer);
+          showAnswerCard(currentScene, option);
         }, 260);
       }
 
@@ -680,7 +766,7 @@
       answerCard.addEventListener("click", hideAnswerCard);
 
       // 初始状态
-      setRandomCatSprite();
+      setRandomCatScene();
       setEnergy(0);
     </script>
   </body>
